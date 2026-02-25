@@ -1,5 +1,5 @@
 @ ============================================
-@ Tetris Phase 11 - Fixed score counter
+@ Tetris Phase 13 - All Critical Fixes
 @ ============================================
 
 @ === MEMORY MAP ===
@@ -7,10 +7,21 @@
 @ 0x20000: RAM base
 @ 0x20100: Game state
 @ 0x20200: Matrix (10 wide, 20 tall)
-@ 0x20300: Tetromino definitions (7 pieces * 4 bytes)
+@ 0x20300: Tetromino definitions (7 pieces * 4 rotations * 4 bytes = 112 bytes)
 @ 0x30000: VRAM (40x20)
 @ 0x40000: MMIO
-@ 0x40008: VSYNC port (write 1 when frame ready)
+@ 0x40008: VSYNC port
+
+@ === GAME STATE ===
+@ [r9, #0x100] = initialized
+@ [r9, #0x104] = piece_x
+@ [r9, #0x108] = piece_y
+@ [r9, #0x10C] = piece_type (0-6)
+@ [r9, #0x110] = score
+@ [r9, #0x114] = gravity counter
+@ [r9, #0x118] = game over flag
+@ [r9, #0x11C] = current_rotation (0-3)
+@ [r9, #0x120] = rotation debounce
 
 @ === ENTRY POINT ===
 _start:
@@ -32,48 +43,147 @@ _start:
     mov r0, #1
     str r0, [r9, #0x100]
     
+    @ ========================================
     @ Initialize Tetromino definitions at 0x20300
-    @ I-piece: row 0=0x00, row 1=0x0F, row 2=0x00, row 3=0x00
+    @ CORRECTED LUT DATA
+    @ ========================================
+    
+    @ === I-PIECE (0x300) ===
     add r0, r9, #0x300
-    mov r1, #0x00
-    strb r1, [r0, #0]
+    @ Rot 0: 0x0F,0x00,0x00,0x00
     mov r1, #0x0F
-    strb r1, [r0, #1]
-    mov r1, #0x00
-    strb r1, [r0, #2]
-    strb r1, [r0, #3]
-    
-    @ J-piece: 0x02, 0x02, 0x07, 0x00
-    add r0, r9, #0x304
-    mov r1, #0x02
     strb r1, [r0, #0]
-    strb r1, [r0, #1]
-    mov r1, #0x07
-    strb r1, [r0, #2]
     mov r1, #0x00
+    strb r1, [r0, #1]
+    strb r1, [r0, #2]
     strb r1, [r0, #3]
+    @ Rot 1: 0x02,0x02,0x02,0x02
+    mov r1, #0x02
+    strb r1, [r0, #4]
+    strb r1, [r0, #5]
+    strb r1, [r0, #6]
+    strb r1, [r0, #7]
+    @ Rot 2: 0x00,0x00,0x0F,0x00
+    mov r1, #0x00
+    strb r1, [r0, #8]
+    strb r1, [r0, #9]
+    mov r1, #0x0F
+    strb r1, [r0, #10]
+    mov r1, #0x00
+    strb r1, [r0, #11]
+    @ Rot 3: 0x04,0x04,0x04,0x04
+    mov r1, #0x04
+    strb r1, [r0, #12]
+    strb r1, [r0, #13]
+    strb r1, [r0, #14]
+    strb r1, [r0, #15]
     
-    @ L-piece: 0x04, 0x04, 0x07, 0x00
-    add r0, r9, #0x308
+    @ === J-PIECE (0x310) ===
+    add r0, r9, #0x310
+    @ Rot 0: 0x04,0x07,0x00,0x00
     mov r1, #0x04
     strb r1, [r0, #0]
-    strb r1, [r0, #1]
     mov r1, #0x07
-    strb r1, [r0, #2]
+    strb r1, [r0, #1]
     mov r1, #0x00
+    strb r1, [r0, #2]
     strb r1, [r0, #3]
+    @ Rot 1: 0x03,0x02,0x02,0x00
+    mov r1, #0x03
+    strb r1, [r0, #4]
+    mov r1, #0x02
+    strb r1, [r0, #5]
+    strb r1, [r0, #6]
+    mov r1, #0x00
+    strb r1, [r0, #7]
+    @ Rot 2: 0x00,0x07,0x01,0x00
+    mov r1, #0x00
+    strb r1, [r0, #8]
+    mov r1, #0x07
+    strb r1, [r0, #9]
+    mov r1, #0x01
+    strb r1, [r0, #10]
+    mov r1, #0x00
+    strb r1, [r0, #11]
+    @ Rot 3: 0x02,0x02,0x06,0x00
+    mov r1, #0x02
+    strb r1, [r0, #12]
+    strb r1, [r0, #13]
+    mov r1, #0x06
+    strb r1, [r0, #14]
+    mov r1, #0x00
+    strb r1, [r0, #15]
     
-    @ O-piece: 0x66, 0x66, 0x00, 0x00
-    add r0, r9, #0x30C
-    mov r1, #0x66
+    @ === L-PIECE (0x320) ===
+    add r0, r9, #0x320
+    @ Rot 0: 0x01,0x07,0x00,0x00
+    mov r1, #0x01
+    strb r1, [r0, #0]
+    mov r1, #0x07
+    strb r1, [r0, #1]
+    mov r1, #0x00
+    strb r1, [r0, #2]
+    strb r1, [r0, #3]
+    @ Rot 1: 0x02,0x02,0x03,0x00
+    mov r1, #0x02
+    strb r1, [r0, #4]
+    strb r1, [r0, #5]
+    mov r1, #0x03
+    strb r1, [r0, #6]
+    mov r1, #0x00
+    strb r1, [r0, #7]
+    @ Rot 2: 0x00,0x07,0x04,0x00
+    mov r1, #0x00
+    strb r1, [r0, #8]
+    mov r1, #0x07
+    strb r1, [r0, #9]
+    mov r1, #0x04
+    strb r1, [r0, #10]
+    mov r1, #0x00
+    strb r1, [r0, #11]
+    @ Rot 3: 0x06,0x02,0x02,0x00
+    mov r1, #0x06
+    strb r1, [r0, #12]
+    mov r1, #0x02
+    strb r1, [r0, #13]
+    strb r1, [r0, #14]
+    mov r1, #0x00
+    strb r1, [r0, #15]
+    
+    @ === O-PIECE (0x330) - Same for all rotations ===
+    add r0, r9, #0x330
+    @ Rot 0: 0x06,0x06,0x00,0x00
+    mov r1, #0x06
     strb r1, [r0, #0]
     strb r1, [r0, #1]
     mov r1, #0x00
     strb r1, [r0, #2]
     strb r1, [r0, #3]
+    @ Rot 1: same
+    mov r1, #0x06
+    strb r1, [r0, #4]
+    strb r1, [r0, #5]
+    mov r1, #0x00
+    strb r1, [r0, #6]
+    strb r1, [r0, #7]
+    @ Rot 2: same
+    mov r1, #0x06
+    strb r1, [r0, #8]
+    strb r1, [r0, #9]
+    mov r1, #0x00
+    strb r1, [r0, #10]
+    strb r1, [r0, #11]
+    @ Rot 3: same
+    mov r1, #0x06
+    strb r1, [r0, #12]
+    strb r1, [r0, #13]
+    mov r1, #0x00
+    strb r1, [r0, #14]
+    strb r1, [r0, #15]
     
-    @ S-piece: 0x03, 0x06, 0x00, 0x00
-    add r0, r9, #0x310
+    @ === S-PIECE (0x340) ===
+    add r0, r9, #0x340
+    @ Rot 0: 0x03,0x06,0x00,0x00
     mov r1, #0x03
     strb r1, [r0, #0]
     mov r1, #0x06
@@ -81,20 +191,75 @@ _start:
     mov r1, #0x00
     strb r1, [r0, #2]
     strb r1, [r0, #3]
+    @ Rot 1: 0x04,0x06,0x02,0x00
+    mov r1, #0x04
+    strb r1, [r0, #4]
+    mov r1, #0x06
+    strb r1, [r0, #5]
+    mov r1, #0x02
+    strb r1, [r0, #6]
+    mov r1, #0x00
+    strb r1, [r0, #7]
+    @ Rot 2: 0x00,0x03,0x06,0x00
+    mov r1, #0x00
+    strb r1, [r0, #8]
+    mov r1, #0x03
+    strb r1, [r0, #9]
+    mov r1, #0x06
+    strb r1, [r0, #10]
+    mov r1, #0x00
+    strb r1, [r0, #11]
+    @ Rot 3: 0x02,0x03,0x01,0x00
+    mov r1, #0x02
+    strb r1, [r0, #12]
+    mov r1, #0x03
+    strb r1, [r0, #13]
+    mov r1, #0x01
+    strb r1, [r0, #14]
+    mov r1, #0x00
+    strb r1, [r0, #15]
     
-    @ T-piece: 0x02, 0x07, 0x02, 0x00
-    add r0, r9, #0x314
+    @ === T-PIECE (0x350) ===
+    add r0, r9, #0x350
+    @ Rot 0: 0x02,0x07,0x00,0x00
     mov r1, #0x02
     strb r1, [r0, #0]
     mov r1, #0x07
     strb r1, [r0, #1]
-    mov r1, #0x02
-    strb r1, [r0, #2]
     mov r1, #0x00
+    strb r1, [r0, #2]
     strb r1, [r0, #3]
+    @ Rot 1: 0x02,0x06,0x02,0x00
+    mov r1, #0x02
+    strb r1, [r0, #4]
+    mov r1, #0x06
+    strb r1, [r0, #5]
+    mov r1, #0x02
+    strb r1, [r0, #6]
+    mov r1, #0x00
+    strb r1, [r0, #7]
+    @ Rot 2: 0x00,0x07,0x02,0x00
+    mov r1, #0x00
+    strb r1, [r0, #8]
+    mov r1, #0x07
+    strb r1, [r0, #9]
+    mov r1, #0x02
+    strb r1, [r0, #10]
+    mov r1, #0x00
+    strb r1, [r0, #11]
+    @ Rot 3: 0x02,0x03,0x02,0x00
+    mov r1, #0x02
+    strb r1, [r0, #12]
+    mov r1, #0x03
+    strb r1, [r0, #13]
+    mov r1, #0x02
+    strb r1, [r0, #14]
+    mov r1, #0x00
+    strb r1, [r0, #15]
     
-    @ Z-piece: 0x06, 0x03, 0x00, 0x00
-    add r0, r9, #0x318
+    @ === Z-PIECE (0x360) ===
+    add r0, r9, #0x360
+    @ Rot 0: 0x06,0x03,0x00,0x00
     mov r1, #0x06
     strb r1, [r0, #0]
     mov r1, #0x03
@@ -102,6 +267,33 @@ _start:
     mov r1, #0x00
     strb r1, [r0, #2]
     strb r1, [r0, #3]
+    @ Rot 1: 0x02,0x06,0x04,0x00
+    mov r1, #0x02
+    strb r1, [r0, #4]
+    mov r1, #0x06
+    strb r1, [r0, #5]
+    mov r1, #0x04
+    strb r1, [r0, #6]
+    mov r1, #0x00
+    strb r1, [r0, #7]
+    @ Rot 2: 0x00,0x06,0x03,0x00
+    mov r1, #0x00
+    strb r1, [r0, #8]
+    mov r1, #0x06
+    strb r1, [r0, #9]
+    mov r1, #0x03
+    strb r1, [r0, #10]
+    mov r1, #0x00
+    strb r1, [r0, #11]
+    @ Rot 3: 0x01,0x03,0x02,0x00
+    mov r1, #0x01
+    strb r1, [r0, #12]
+    mov r1, #0x03
+    strb r1, [r0, #13]
+    mov r1, #0x02
+    strb r1, [r0, #14]
+    mov r1, #0x00
+    strb r1, [r0, #15]
     
     @ Clear game state
     mov r0, #0
@@ -111,6 +303,8 @@ _start:
     str r0, [r9, #0x110]
     str r0, [r9, #0x114]
     str r0, [r9, #0x118]
+    str r0, [r9, #0x11C]
+    str r0, [r9, #0x120]
     
     @ Initialize position
     mov r0, #3
@@ -118,7 +312,7 @@ _start:
     mov r0, #0
     str r0, [r9, #0x108]
     
-    @ Clear Matrix (200 bytes starting at 0x20200)
+    @ Clear Matrix (200 bytes)
     add r0, r9, #0x200
     mov r1, #0
     mov r2, #200
@@ -140,14 +334,13 @@ main_loop:
     add r0, r0, #1
     str r0, [r9, #0x114]
     
-    @ Check for soft drop (Down button = bit 2)
+    @ Check for soft drop
     movw r0, #0x0000
     movt r0, #0x0004
     ldr r4, [r0]
     tst r4, #2
     beq check_gravity
     
-    @ Soft drop: force gravity trigger
     mov r0, #100
     str r0, [r9, #0x114]
     b do_gravity
@@ -162,10 +355,10 @@ do_gravity:
     mov r0, #0
     str r0, [r9, #0x114]
     
-    @ Try to move down
     ldr r0, [r9, #0x10C]
     ldr r1, [r9, #0x104]
     ldr r2, [r9, #0x108]
+    ldr r3, [r9, #0x11C]
     add r2, r2, #1
     bl check_collision
     cmp r0, #0
@@ -180,59 +373,91 @@ do_lock:
     ldr r0, [r9, #0x10C]
     ldr r1, [r9, #0x104]
     ldr r2, [r9, #0x108]
-    mov r3, #1
+    ldr r3, [r9, #0x11C]
+    mov r4, #1
     bl write_piece
     bl clear_lines
     bl spawn_piece
-    bl render          @ Call render to write VSYNC!
-    b main_loop        @ Go directly to main_loop
+    bl render
+    b main_loop
 
 skip_gravity:
     movw r0, #0x0000
     movt r0, #0x0004
     ldr r4, [r0]
     
-    @ Left
+    @ === ROTATION ===
+    tst r4, #1
+    beq check_left
+    
+    ldr r0, [r9, #0x120]
+    cmp r0, #0
+    bne check_left
+    
+    mov r0, #10
+    str r0, [r9, #0x120]
+    
+    @ Calculate new rotation: (current + 1) AND 3
+    ldr r0, [r9, #0x11C]
+    add r0, r0, #1
+    and r0, r0, #3
+    
+    @ Aseta argumentit OIKEIN check_collision -funktiolle
+    mov r3, r0           @ r3 = uusi rotaatio
+    mov r5, r0           @ tallenna uusi rotaatio r5:een talteen
+    ldr r0, [r9, #0x10C] @ r0 = type
+    ldr r1, [r9, #0x104] @ r1 = x
+    ldr r2, [r9, #0x108] @ r2 = y
+    bl check_collision
+    cmp r0, #0
+    bne check_left
+    
+    str r5, [r9, #0x11C]
+    b skip_debounce
+
+check_left:
     tst r4, #4
-    beq skip_left
+    beq check_right
     ldr r0, [r9, #0x10C]
     ldr r1, [r9, #0x104]
     sub r1, r1, #1
     ldr r2, [r9, #0x108]
+    ldr r3, [r9, #0x11C]
     bl check_collision
     cmp r0, #0
-    bne skip_left
+    bne check_right
     ldr r0, [r9, #0x104]
     sub r0, r0, #1
     str r0, [r9, #0x104]
 
-skip_left:
+check_right:
     tst r4, #8
-    beq skip_right
+    beq update_debounce
     ldr r0, [r9, #0x10C]
     ldr r1, [r9, #0x104]
     add r1, r1, #1
     ldr r2, [r9, #0x108]
+    ldr r3, [r9, #0x11C]
     bl check_collision
     cmp r0, #0
-    bne skip_right
+    bne update_debounce
     ldr r0, [r9, #0x104]
     add r0, r0, #1
     str r0, [r9, #0x104]
 
-skip_right:
+update_debounce:
+    ldr r0, [r9, #0x120]
+    cmp r0, #0
+    beq skip_debounce
+    sub r0, r0, #1
+    str r0, [r9, #0x120]
+skip_debounce:
+
     bl render
-skip_input:
     b main_loop
 
 game_over_loop:
     bl render
-    bl game_over_handler
-    @ Write VSYNC for game over screen
-    movw r0, #0x0008
-    movt r0, #0x0004
-    mov r1, #1
-    str r1, [r0]
     b game_over_loop
 
 @ ============================================
@@ -248,6 +473,9 @@ spawn_piece:
     bl modulo
     str r0, [r9, #0x10C]
     
+    mov r0, #0
+    str r0, [r9, #0x11C]
+    
     mov r0, #3
     str r0, [r9, #0x104]
     mov r0, #0
@@ -256,6 +484,7 @@ spawn_piece:
     ldr r0, [r9, #0x10C]
     ldr r1, [r9, #0x104]
     ldr r2, [r9, #0x108]
+    ldr r3, [r9, #0x11C]
     bl check_collision
     cmp r0, #0
     beq spawn_done
@@ -267,18 +496,20 @@ spawn_done:
     pop {r4-r7, pc}
 
 @ ============================================
-@ check_collision
+@ check_collision - FIXED: Y < 19 (not 20)
 @ ============================================
 check_collision:
     push {r4-r8, r10-r11, lr}
     mov r4, r0
     mov r5, r1
     mov r6, r2
+    mov r7, r3
     
-    mov r7, r4
-    lsl r7, r7, #2
-    add r7, r7, r9
-    add r7, r7, #0x300
+    lsl r0, r4, #4
+    lsl r1, r7, #2
+    add r0, r0, r1
+    add r0, r0, r9
+    add r7, r0, #0x300
     
     mov r4, #0
 cc_row_loop:
@@ -295,6 +526,7 @@ cc_col_loop:
     add r1, r6, r4
     add r2, r5, r8
     
+    @ FIXED: cmp r1, #19 (not 20)
     cmp r1, #19
     bge cc_hit
     cmp r1, #0
@@ -334,65 +566,72 @@ cc_hit:
     pop {r4-r8, r10-r11, pc}
 
 @ ============================================
-@ write_piece
+@ write_piece - FIXED: Y < 19
 @ ============================================
 write_piece:
-    push {r4-r7, lr}
-    mov r4, r0
-    mov r5, r1
-    mov r6, r2
-    mov r7, r3
+    push {r4-r7, r10-r11, lr}
+    mov r5, r0
+    mov r6, r1
+    mov r7, r2
+    mov r0, r3
+    mov r1, r4
     
-    lsl r0, r4, #2
-    add r0, r0, r9
-    add r0, r0, #0x300
-    
-    mov r4, #0
-wp_row_loop:
-    ldrb r1, [r0, r4]
-    cmp r1, #0
-    beq wp_next_row
+    lsl r2, r5, #4
+    lsl r3, r0, #2
+    add r2, r2, r3
+    add r2, r2, r9
+    add r2, r2, #0x300
     
     mov r3, #0
+wp_row_loop:
+    ldrb r4, [r2, r3]
+    cmp r4, #0
+    beq wp_next_row
+    
+    push {r3}
+    mov r5, #0
     mov r12, #8
 wp_col_loop:
-    tst r1, r12
+    tst r4, r12
     beq wp_next_col
     
-    add r2, r6, r4
-    add r11, r5, r3
+    add r0, r7, r3
+    add r11, r6, r5
     
-    cmp r2, #0
+    cmp r0, #0
     blt wp_next_col
-    cmp r2, #20
+    @ FIXED: cmp r0, #19
+    cmp r0, #19
     bge wp_next_col
     cmp r11, #0
     blt wp_next_col
     cmp r11, #10
     bge wp_next_col
     
-    push {r2}
-    mov r10, r2
-    lsl r2, r2, #3
+    push {r0}
+    mov r10, r0
+    lsl r0, r0, #3
     lsl r10, r10, #1
-    add r2, r2, r10
-    add r2, r2, r11
-    add r2, r2, r9
-    add r2, r2, #0x200
-    strb r7, [r2]
-    pop {r2}
+    add r0, r0, r10
+    add r0, r0, r11
+    add r0, r0, r9
+    add r0, r0, #0x200
+    strb r1, [r0]
+    pop {r0}
     
 wp_next_col:
     lsr r12, r12, #1
+    add r5, r5, #1
+    cmp r5, #4
+    blt wp_col_loop
+    pop {r3}
+    
+wp_next_row:
     add r3, r3, #1
     cmp r3, #4
-    blt wp_col_loop
-wp_next_row:
-    add r4, r4, #1
-    cmp r4, #4
     blt wp_row_loop
     
-    pop {r4-r7, pc}
+    pop {r4-r7, r10-r11, pc}
 
 @ ============================================
 @ clear_lines
@@ -484,7 +723,7 @@ cl_next_row:
     pop {r4-r8, r10-r11, pc}
 
 @ ============================================
-@ render
+@ render - FIXED: Game Over in render
 @ ============================================
 render:
     push {r4-r7, r10-r11, lr}
@@ -578,70 +817,16 @@ render_mat_next:
     ldr r0, [r9, #0x10C]
     ldr r1, [r9, #0x104]
     ldr r2, [r9, #0x108]
-    mov r3, #35
+    ldr r3, [r9, #0x11C]
+    mov r4, #35
     bl draw_piece
     
-    @ Draw score (4 digits: thousands, hundreds, tens, ones)
-    @ Max score = 9999, supports overflow
-    ldr r0, [r9, #0x110]
-    mov r1, r8
-    movw r2, #110
-    add r1, r1, r2      @ r1 = VRAM + 110
-    
-    @ Calculate thousands
-    mov r2, #0          @ r2 = thousands
-render_score_thousands:
-    cmp r0, #1000
-    blt render_score_hundreds_calc
-    sub r0, r0, #1000
-    add r2, r2, #1
-    b render_score_thousands
-    
-render_score_hundreds_calc:
-    @ r2 = thousands, r0 = remainder (0-999)
-    strb r2, [r1]       @ store thousands (will add 48 later)
-    
-    @ Calculate hundreds from remainder
-    mov r2, #0          @ r2 = hundreds
-render_score_hundreds:
-    cmp r0, #100
-    blt render_score_tens_calc
-    sub r0, r0, #100
-    add r2, r2, #1
-    b render_score_hundreds
-    
-render_score_tens_calc:
-    @ r2 = hundreds, r0 = remainder (0-99)
-    add r2, r2, #48     @ convert to ASCII
-    strb r2, [r1, #1]   @ store hundreds
-    
-    @ Calculate tens from remainder
-    mov r2, #0          @ r2 = tens
-render_score_tens:
-    cmp r0, #10
-    blt render_score_ones
-    sub r0, r0, #10
-    add r2, r2, #1
-    b render_score_tens
-    
-render_score_ones:
-    @ r2 = tens, r0 = ones
-    add r2, r2, #48     @ convert tens to ASCII
-    strb r2, [r1, #2]   @ store tens
-    add r0, r0, #48     @ convert ones to ASCII
-    strb r0, [r1, #3]   @ store ones
-    
-    @ Now fix thousands - reload and add 48
-    ldrb r0, [r1]       @ reload thousands
-    add r0, r0, #48     @ convert to ASCII
-    strb r0, [r1]       @ store thousands
-    
-    @ Check for game over and draw GAME OVER text
+    @ === CHECK GAME OVER AND DRAW TEXT ===
     ldr r0, [r9, #0x118]
     cmp r0, #1
-    bne render_vsync
+    bne render_score
     
-    @ Draw GAME OVER text
+    @ Draw GAME OVER text at VRAM+160
     mov r0, r8
     movw r1, #160
     add r0, r0, r1
@@ -664,7 +849,54 @@ render_score_ones:
     mov r1, #82     @ 'R'
     strb r1, [r0, #8]
     
-render_vsync:
+render_score:
+    @ Draw score
+    ldr r0, [r9, #0x110]
+    mov r1, r8
+    movw r2, #110
+    add r1, r1, r2
+    
+    mov r2, #0
+render_score_thousands:
+    cmp r0, #1000
+    blt render_score_hundreds_calc
+    sub r0, r0, #1000
+    add r2, r2, #1
+    b render_score_thousands
+    
+render_score_hundreds_calc:
+    strb r2, [r1]
+    
+    mov r2, #0
+render_score_hundreds:
+    cmp r0, #100
+    blt render_score_tens_calc
+    sub r0, r0, #100
+    add r2, r2, #1
+    b render_score_hundreds
+    
+render_score_tens_calc:
+    add r2, r2, #48
+    strb r2, [r1, #1]
+    
+    mov r2, #0
+render_score_tens:
+    cmp r0, #10
+    blt render_score_ones
+    sub r0, r0, #10
+    add r2, r2, #1
+    b render_score_tens
+    
+render_score_ones:
+    add r2, r2, #48
+    strb r2, [r1, #2]
+    add r0, r0, #48
+    strb r0, [r1, #3]
+    
+    ldrb r0, [r1]
+    add r0, r0, #48
+    strb r0, [r1]
+    
     @ VSYNC
     movw r0, #0x0008
     movt r0, #0x0004
@@ -674,96 +906,73 @@ render_vsync:
     pop {r4-r7, r10-r11, pc}
 
 @ ============================================
-@ draw_piece
+@ draw_piece - FIXED: Y < 19
 @ ============================================
 draw_piece:
     push {r4-r7, lr}
-    mov r4, r0
-    mov r5, r1
-    mov r6, r2
-    mov r7, r3
+    mov r5, r0
+    mov r6, r1
+    mov r7, r2
+    mov r0, r3
+    mov r1, r4
     
-    lsl r0, r4, #2
-    add r0, r0, r9
-    add r0, r0, #0x300
-    
-    mov r4, #0
-dp_row_loop:
-    ldrb r1, [r0, r4]
-    cmp r1, #0
-    beq dp_next_row
+    lsl r2, r5, #4
+    lsl r3, r0, #2
+    add r2, r2, r3
+    add r2, r2, r9
+    add r2, r2, #0x300
     
     mov r3, #0
-dp_col_loop:
-    mov r2, #3
-    sub r2, r2, r3
-    mov r12, #1
-    lsl r12, r12, r2
+dp_row_loop:
+    ldrb r4, [r2, r3]
+    cmp r4, #0
+    beq dp_next_row
     
-    tst r1, r12
+    push {r3}
+    mov r5, #0
+dp_col_loop:
+    mov r0, #3
+    sub r0, r0, r5
+    mov r12, #1
+    lsl r12, r12, r0
+    
+    tst r4, r12
     beq dp_next_col
     
-    add r2, r6, r4
+    add r0, r7, r3
     
-    cmp r2, #0
+    cmp r0, #0
     blt dp_next_col
-    cmp r2, #20
+    @ FIXED: cmp r0, #19
+    cmp r0, #19
     bge dp_next_col
     
-    add r12, r5, r3
+    add r12, r6, r5
     cmp r12, #0
     blt dp_next_col
     cmp r12, #10
     bge dp_next_col
     
-    push {r1}
-    lsl r1, r2, #5
-    lsl r2, r2, #3
-    add r1, r1, r2
-    add r1, r1, r12
-    add r1, r1, #15
-    add r1, r1, r8
-    strb r7, [r1]
-    pop {r1}
+    push {r4}
+    lsl r4, r0, #5
+    lsl r0, r0, #3
+    add r4, r4, r0
+    add r4, r4, r12
+    add r4, r4, #15
+    add r4, r4, r8
+    strb r1, [r4]
+    pop {r4}
     
 dp_next_col:
+    add r5, r5, #1
+    cmp r5, #4
+    blt dp_col_loop
+    pop {r3}
+    
+dp_next_row:
     add r3, r3, #1
     cmp r3, #4
-    blt dp_col_loop
-dp_next_row:
-    add r4, r4, #1
-    cmp r4, #4
     blt dp_row_loop
-    
-    pop {r4-r7, pc}
-
-@ ============================================
-@ game_over_handler
-@ ============================================
-game_over_handler:
-    push {r4-r7, lr}
-    
-    mov r0, r8
-    movw r1, #160
-    add r0, r0, r1
-    mov r1, #71
-    strb r1, [r0]
-    mov r1, #65
-    strb r1, [r0, #1]
-    mov r1, #77
-    strb r1, [r0, #2]
-    mov r1, #69
-    strb r1, [r0, #3]
-    mov r1, #32
-    strb r1, [r0, #4]
-    mov r1, #79
-    strb r1, [r0, #5]
-    mov r1, #86
-    strb r1, [r0, #6]
-    mov r1, #69
-    strb r1, [r0, #7]
-    mov r1, #82
-    strb r1, [r0, #8]
     
     pop {r4-r7, pc}
 

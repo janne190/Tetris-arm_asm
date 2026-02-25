@@ -94,14 +94,12 @@ Pelilauta on klassinen **10 × 20** ruudukko. Kaikki seitsemän standarditetromi
 - [x] Peli ohi -tunnistus ja "GAME OVER" -teksti
 - [x] VSYNC-mekanismi sulavaan renderöintiin
 - [x] Tekstipohjainen terminaalinäyttö (ANSI-ohjaussekvenssit)
-
+- [x] Palojen kääntäminen
 ---
 
 ## Puuttuvat ominaisuudet
 
 > Nämä ominaisuudet **eivät ole vielä toteutettu**:
-
-- [ ] **Palojen kääntäminen** — tärkein puuttuva ominaisuus
 - [ ] Seuraavan palan esikatselu
 - [ ] Tasojen eteneminen (peli nopeutuu pisteiden karttuessa)
 - [ ] Tuhottujen rivien laskuri näytöllä
