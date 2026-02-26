@@ -218,7 +218,6 @@ _start:
     strb r1, [r0, #14]
     mov r1, #0x00
     strb r1, [r0, #15]
-    
     @ === T-PIECE (0x350) ===
     add r0, r9, #0x350
     @ Rot 0: 0x02,0x07,0x00,0x00
@@ -229,10 +228,10 @@ _start:
     mov r1, #0x00
     strb r1, [r0, #2]
     strb r1, [r0, #3]
-    @ Rot 1: 0x02,0x06,0x02,0x00
+    @ Rot 1: 0x02, 0x03, 0x02, 0x00
     mov r1, #0x02
     strb r1, [r0, #4]
-    mov r1, #0x06
+    mov r1, #0x03
     strb r1, [r0, #5]
     mov r1, #0x02
     strb r1, [r0, #6]
@@ -247,16 +246,16 @@ _start:
     strb r1, [r0, #10]
     mov r1, #0x00
     strb r1, [r0, #11]
-    @ Rot 3: 0x02,0x03,0x02,0x00
+    @ Rot 3: 0x02, 0x06, 0x02, 0x00
     mov r1, #0x02
     strb r1, [r0, #12]
-    mov r1, #0x03
+    mov r1, #0x06
     strb r1, [r0, #13]
     mov r1, #0x02
     strb r1, [r0, #14]
     mov r1, #0x00
     strb r1, [r0, #15]
-    
+
     @ === Z-PIECE (0x360) ===
     add r0, r9, #0x360
     @ Rot 0: 0x06,0x03,0x00,0x00
@@ -296,6 +295,7 @@ _start:
     strb r1, [r0, #15]
     
     @ Clear game state
+reset_game:
     mov r0, #0
     str r0, [r9, #0x104]
     str r0, [r9, #0x108]
@@ -316,10 +316,14 @@ _start:
     add r0, r9, #0x200
     mov r1, #0
     mov r2, #200
-init_matrix_loop:
+reset_matrix_loop:
     strb r1, [r0], #1
     subs r2, r2, #1
-    bne init_matrix_loop
+    bne reset_matrix_loop
+    
+    @ Arvo ensimmäinen NEXT-palikka
+    bl get_random_piece
+    str r0, [r9, #0x124]   @ Tallenna ensimmäinen NEXT-palikka
     
     @ Spawn first piece
     bl spawn_piece
@@ -457,8 +461,17 @@ skip_debounce:
     b main_loop
 
 game_over_loop:
+    @ 1. Lue ohjain ENNEN VSYNC-pysäytystä!
+    movw r0, #0x0000
+    movt r0, #0x0004
+    ldr r1, [r0]
+    tst r1, #16             @ Onko A-nappi (Space) painettuna?
+    bne reset_game          @ Jos on, aloita alusta!
+    
+    @ 2. Jos ei painettu, piirrä ruutu ja laukaise VSYNC
     bl render
-    b game_over_loop
+    b game_over_loop        @ Tänne tuskin koskaan päästään, mutta pidetään varmuuden vuoksi
+
 
 @ ============================================
 @ spawn_piece
@@ -466,13 +479,13 @@ game_over_loop:
 spawn_piece:
     push {r4-r7, lr}
     
-    movw r0, #0x0004
-    movt r0, #0x0004
-    ldr r0, [r0]
-    mov r1, #7
-    bl modulo
-    str r0, [r9, #0x10C]
+    ldr r0, [r9, #0x124]   @ Hae next piece
+    str r0, [r9, #0x10C]   @ Aseta se nykyiseksi palikaksi
     
+    bl get_random_piece    @ Arvo uusi next piece
+    str r0, [r9, #0x124]   @ Tallenna se odottamaan
+    
+    @ Reset rotation to 0
     mov r0, #0
     str r0, [r9, #0x11C]
     
@@ -821,6 +834,62 @@ render_mat_next:
     mov r4, #35
     bl draw_piece
     
+    @ === DRAW NEXT PIECE ===
+    @ Draw "NEXT" text at VRAM + 147 (X=27, Y=3) - right side of wall
+    @ VRAM address = Y * 40 + X = 3 * 40 + 27 = 147
+    mov r0, r8
+    add r0, r0, #147
+    mov r1, #78     @ 'N'
+    strb r1, [r0]
+    mov r1, #69     @ 'E'
+    strb r1, [r0, #1]
+    mov r1, #88     @ 'X'
+    strb r1, [r0, #2]
+    mov r1, #84     @ 'T'
+    strb r1, [r0, #3]
+    
+    @ Draw next piece shape at X=32, Y=5
+    ldr r5, [r9, #0x124]  @ type
+    lsl r2, r5, #4        @ type * 16
+    add r2, r2, r9
+    add r2, r2, #0x300    @ r2 = LUT address
+    mov r3, #0            @ row
+np_row_loop:
+    ldrb r4, [r2, r3]
+    cmp r4, #0
+    beq np_next_row
+    
+    mov r5, #0            @ col
+np_col_loop:
+    mov r0, #3
+    sub r0, r0, r5
+    mov r12, #1
+    lsl r12, r12, r0
+    tst r4, r12
+    beq np_next_col
+    
+    @ Calculate VRAM address: Y = row+5, X = col+32
+    add r0, r3, #5
+    mov r10, r0
+    lsl r10, r10, #5      @ Y * 32
+    mov r11, r0
+    lsl r11, r11, #3      @ Y * 8
+    add r0, r10, r11      @ Y * 40
+    add r0, r0, #32       @ X base (32)
+    add r0, r0, r5        @ + col
+    add r0, r0, r8        @ + VRAM base
+    mov r1, #35           @ '#'
+    strb r1, [r0]
+
+np_next_col:
+    add r5, r5, #1
+    cmp r5, #4
+    blt np_col_loop
+np_next_row:
+    add r3, r3, #1
+    cmp r3, #4
+    blt np_row_loop
+    
     @ === CHECK GAME OVER AND DRAW TEXT ===
     ldr r0, [r9, #0x118]
     cmp r0, #1
@@ -977,14 +1046,22 @@ dp_next_row:
     pop {r4-r7, pc}
 
 @ ============================================
-@ modulo
+@ get_random_piece: Palauttaa arvon 0-6 (r0)
 @ ============================================
-modulo:
-    and r0, r0, #7
-    cmp r0, #7
-    bne modulo_done
-    mov r0, #6
-modulo_done:
+get_random_piece:
+    movw r1, #0x0004
+    movt r1, #0x0004       @ r1 = 0x40004
+    ldr r0, [r1]           @ Lue 32-bit random KERRAN
+grp_loop:
+    and r2, r0, #7         @ Ota 3 alinta bittiä r2:een
+    cmp r2, #7             @ Onko se 7?
+    bne grp_done           @ Jos 0-6, homma selvä!
+    lsr r0, r0, #3         @ Jos oli 7, pudota käytetyt bitit pois (siirrä oikealle)
+    cmp r0, #0             @ Loppuiko luku kesken?
+    bne grp_loop           @ Jos ei, kokeile uusia bittejä
+    mov r2, #0             @ Fallback: jos kaikki bitit olivat 7 (erittäin harvinaista), palauta 0
+grp_done:
+    mov r0, r2             @ Siirrä tulos r0:aan
     bx lr
 
 @ END

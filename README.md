@@ -95,18 +95,18 @@ Pelilauta on klassinen **10 × 20** ruudukko. Kaikki seitsemän standarditetromi
 - [x] VSYNC-mekanismi sulavaan renderöintiin
 - [x] Tekstipohjainen terminaalinäyttö (ANSI-ohjaussekvenssit)
 - [x] Palojen kääntäminen
+- [x] Seuraavan palan esikatselu
+- [x] Uudelleenaloitus ilman ohjelman käynnistämistä uudelleen
+
 ---
 
 ## Puuttuvat ominaisuudet
 
 > Nämä ominaisuudet **eivät ole vielä toteutettu**:
-- [ ] Seuraavan palan esikatselu
 - [ ] Tasojen eteneminen (peli nopeutuu pisteiden karttuessa)
 - [ ] Tuhottujen rivien laskuri näytöllä
 - [ ] Ennätyspisteytys
 - [ ] Pelitaustan värit / ASCII-taide
-- [ ] Uudelleenaloitus ilman ohjelman käynnistämistä uudelleen
-
 ---
 
 ## Vaatimukset
@@ -155,9 +155,9 @@ pip install unicorn
 | `A` tai `←` | Siirrä palaa vasemmalle |
 | `D` tai `→` | Siirrä palaa oikealle |
 | `S` tai `↓` | Nopea pudotus (soft drop) |
-| `W` tai `↑` | *(ei käytössä — kääntö tulossa)* |
+| `W` tai `↑` | Palikan kierto myötäpäivää |
+| `SPACE` | Restart peli |
 | `Q` | Lopeta peli |
-
 ---
 
 ## Tiedostorakenne
