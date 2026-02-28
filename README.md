@@ -1,176 +1,171 @@
-# Tetris — ARM Assembly
+# Tetris - ARM Assembly
 
-> **Huom:** Projekti on kesken. Katso [Puuttuvat ominaisuudet](#puuttuvat-ominaisuudet)-osio.
-
-Tetris-toteutus kirjoitettuna ARMv7-kokoonpanokielellä (ARM Assembly), jota suoritetaan [Unicorn Engine](https://www.unicorn-engine.org/) -emulaattorissa Python-ajurilla.
+Tetris implementation written in ARMv7 Assembly, running in a [Unicorn Engine](https://www.unicorn-engine.org/) emulator with a Python driver.
 
 ---
 
-## Sisällysluettelo
+## Table of Contents
 
-- [Yleiskuvaus](#yleiskuvaus)
-- [Arkkitehtuuri](#arkkitehtuuri)
-- [Ominaisuudet](#ominaisuudet)
-- [Puuttuvat ominaisuudet](#puuttuvat-ominaisuudet)
-- [Vaatimukset](#vaatimukset)
-- [Asennus ja käynnistys](#asennus-ja-käynnistys)
-- [Ohjaus](#ohjaus)
-- [Muistikartta](#muistikartta)
-- [Tiedostorakenne](#tiedostorakenne)
-
----
-
-## Yleiskuvaus
-
-Projektin tavoitteena on toteuttaa toimiva Tetris-peli puhtaasti ARMv7-kokoonpanokielellä. Peli ajetaan Python-skriptin käynnistämässä ARM-emulaattorissa, joka emuloi yksinkertaista retrokonsoliympäristöä VRAM-näyttöpuskurilla ja muistikartoitetulla I/O:lla.
-
-Pelilauta on klassinen **10 × 20** ruudukko. Kaikki seitsemän standarditetrominoa (I, J, L, O, S, T, Z) on määritelty tietolomakkeina.
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation and Running](#installation-and-running)
+- [Controls](#controls)
+- [Memory Map](#memory-map)
+- [File Structure](#file-structure)
 
 ---
 
-## Arkkitehtuuri
+## Overview
+
+The goal of the project is to implement a fully functional Tetris game purely in ARMv7 assembly. The game is run within an ARM emulator launched by a Python script, emulating a simple retro console environment with a VRAM display buffer and memory-mapped I/O.
+
+The game board is a classic **10 x 20** grid. All seven standard tetrominos (I, J, L, O, S, T, Z) are defined.
+
+---
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│           tetris_runner.py              │
-│  (Python + Unicorn Engine -ajuri)       │
-│                                         │
-│  ┌──────────┐   ┌──────────────────┐   │
-│  │  Syöte   │   │  Näyttörenderöinti│   │
-│  │  (Win32  │   │  (ANSI-terminaali)│   │
-│  │  VK API) │   └──────────────────┘   │
-│  └────┬─────┘            ▲             │
-│       │ MMIO-kirjoitus    │ VRAM-luku   │
-│  ┌────▼──────────────────┴──────────┐  │
-│  │      Unicorn ARM-emulaattori     │  │
-│  │  ┌───────────────────────────┐   │  │
-│  │  │        main.s             │   │  │
-│  │  │   (ARMv7 Assembly -peli)  │   │  │
-│  │  └───────────────────────────┘   │  │
-│  └──────────────────────────────────┘  │
-└─────────────────────────────────────────┘
+,-----------------------------------------.
+|           tetris_runner.py              |
+|  (Python + Unicorn Engine driver)       |
+|                                         |
+|  +----------+   +------------------+    |
+|  |  Input   |   | Display render   |    |
+|  |  (Win32  |   | (ANSI terminal)  |    |
+|  |  VK API) |   +------------------+    |
+|  +----+-----+            ^              |
+|       | MMIO write       | VRAM read    |
+|  +----v------------------+----------+   |
+|  |      Unicorn ARM emulator        |   |
+|  |  +---------------------------+   |   |
+|  |  |        main.s             |   |   |
+|  |  |   (ARMv7 Assembly game)   |   |   |
+|  |  +---------------------------+   |   |
+|  +----------------------------------+   |
+`-----------------------------------------'
 ```
 
-### Muisti- ja I/O-malli
+### Memory and I/O Model
 
-| Alue | Osoite | Kuvaus |
-|------|--------|--------|
-| Koodi (ROM) | `0x10000` | ARM-konekoodibinääri |
-| RAM | `0x20000` | Pinokehys, pelitila, tetromino-data |
-| Pelitila | `0x20100` | Pelitilan muuttujat |
-| Matriisi | `0x20200` | Pelilauta (10 × 20 tavua) |
-| Tetromino-määrittelyt | `0x20300` | 7 palaa × 4 tavua (rivi-bittimaski) |
-| VRAM | `0x30000` | Näyttöpuskuri (40 × 20 merkkiä) |
-| MMIO | `0x40000` | Painonäppäinten tila |
-| RNG-portti | `0x40004` | Satunnaisluku (Python kirjoittaa) |
-| VSYNC-portti | `0x40008` | ARM kirjoittaa `1` kun kuva on valmis |
+| Region | Address | Description |
+|--------|---------|-------------|
+| Code (ROM) | `0x10000` | ARM machine code binary |
+| RAM | `0x20000` | Stack frame, game state, tetromino data |
+| Game State | `0x20100` | Game state variables |
+| Matrix | `0x20200` | Game board (10 x 20 bytes) |
+| Tetromino Definitions | `0x20300` | 7 pieces x 4 bytes (row bitmask) |
+| VRAM | `0x30000` | Display buffer (40 x 20 chars) |
+| MMIO | `0x40000` | Keypad state |
+| RNG Port | `0x40004` | Random number (Python writes) |
+| VSYNC Port | `0x40008` | ARM writes `1` when frame is ready |
 
-### Pelitilan muuttujat (RAM `0x20100`)
+### Game State Variables (RAM `0x20100`)
 
-| Offset | Kuvaus |
-|--------|--------|
-| `+0x100` | Alustusmerkkibitti |
-| `+0x104` | Nykyinen pala: X-koordinaatti |
-| `+0x108` | Nykyinen pala: Y-koordinaatti |
-| `+0x10C` | Nykyinen palatyyppi (0–6) |
-| `+0x110` | Pisteet |
-| `+0x114` | Gravitaatiolaskuri |
-| `+0x118` | Peli ohi -lippu |
-
----
-
-## Ominaisuudet
-
-- [x] Kaikki 7 standarditetrominoa (I, J, L, O, S, T, Z)
-- [x] 10 × 20 pelilauta
-- [x] Palojen putoaminen (gravitaatio)
-- [x] Siirtyminen vasemmalle ja oikealle
-- [x] Nopea pudotus (soft drop)
-- [x] Täyden rivin tunnistus ja poistaminen
-- [x] Rivien siirtäminen alaspäin poistetun rivin jälkeen
-- [x] Törmäystarkistus (seinät, lattia, lukitut palat)
-- [x] Pisteytys (100 pistettä per poistettu rivi)
-- [x] Pisteiden näyttäminen (4-numeroinen, maks. 9999)
-- [x] Peli ohi -tunnistus ja "GAME OVER" -teksti
-- [x] VSYNC-mekanismi sulavaan renderöintiin
-- [x] Tekstipohjainen terminaalinäyttö (ANSI-ohjaussekvenssit)
-- [x] Palojen kääntäminen
-- [x] Seuraavan palan esikatselu
-- [x] Uudelleenaloitus ilman ohjelman käynnistämistä uudelleen
+| Offset | Description |
+|--------|-------------|
+| `+0x100` | Initialization flag |
+| `+0x104` | Current piece: X-coordinate |
+| `+0x108` | Current piece: Y-coordinate |
+| `+0x10C` | Current piece type (0-6) |
+| `+0x110` | Score |
+| `+0x114` | Gravity counter |
+| `+0x118` | Game over flag |
+| `+0x11C` | High Score |
+| `+0x120` | Current Level |
+| `+0x124` | Lines Cleared |
 
 ---
 
-## Puuttuvat ominaisuudet
+## Features
 
-> Nämä ominaisuudet **eivät ole vielä toteutettu**:
-- [ ] Tasojen eteneminen (peli nopeutuu pisteiden karttuessa)
-- [ ] Tuhottujen rivien laskuri näytöllä
-- [ ] Ennätyspisteytys
-- [ ] Pelitaustan värit / ASCII-taide
+- [x] All 7 standard tetrominos (I, J, L, O, S, T, Z)
+- [x] 10 x 20 game board
+- [x] Piece falling (gravity)
+- [x] Moving left and right
+- [x] Fast dropping (soft drop)
+- [x] Full line detection and clearing
+- [x] Shifting lines down after clearing
+- [x] Collision detection (walls, floor, locked pieces)
+- [x] Scoring (100 points per cleared line)
+- [x] Score display (4-digit, max 9999)
+- [x] Game over detection and "GAME OVER" text
+- [x] VSYNC mechanism for smooth rendering
+- [x] Text-based terminal display (ANSI control sequences)
+- [x] Piece rotation
+- [x] Next piece preview
+- [x] Restart game without restarting the program
+- [x] Level progression (game speeds up as score increases)
+- [x] High score tracking
+- [x] Game background colors / ASCII art
+
 ---
 
-## Vaatimukset
+## Requirements
 
-- **Windows** (syötesilmukka käyttää Win32 `GetAsyncKeyState` -API:a)
+- **Windows** (input loop uses Win32 `GetAsyncKeyState` API)
 - **Python 3.8+**
-- **unicorn** Python-kirjasto
+- **unicorn** Python library
 
-```
+```bash
 pip install unicorn
 ```
 
-> Python-paketti `unicorn` sisältää valmiiksi käännetyn Unicorn Engine -kirjaston,
-> eikä erillisiä C-kirjastoja tarvita.
+> The Python package `unicorn` includes the pre-compiled Unicorn Engine library, no separate C libraries are needed.
 
 ---
 
-## Asennus ja käynnistys
+## Installation and Running
 
-1. Kloonaa tai lataa repositorio:
-   ```
+1. Clone or download the repository:
+   ```bash
    git clone https://github.com/janne190/Tetris-arm_asm.git
    cd Tetris-arm_asm
    ```
 
-2. Asenna riippuvuus:
-   ```
+2. Install the dependency:
+   ```bash
    pip install unicorn
    ```
 
-3. Käynnistä peli:
-   ```
+3. Start the game:
+   ```bash
    python tetris_runner.py
    ```
 
-> Ajuriskripti sisältää ARM-binäärin valmiiksi käännettynä hex-merkkijonona.
-> Erillistä kääntäjää (esim. `arm-none-eabi-as`) ei tarvita pelin ajamiseen.
-> `main.s` on lähdekooditiedosto, josta binääri on tuotettu.
+> The driver script reads the compiled ARM binary from `tetris_binary.hex`.
+> A separate compiler (e.g., `arm-none-eabi-as`) is not needed to run the game.
+> `main.s` is the source code file from which the binary is generated.
 
 ---
 
-## Ohjaus
+## Controls
 
-| Näppäin | Toiminto |
-|---------|----------|
-| `A` tai `←` | Siirrä palaa vasemmalle |
-| `D` tai `→` | Siirrä palaa oikealle |
-| `S` tai `↓` | Nopea pudotus (soft drop) |
-| `W` tai `↑` | Palikan kierto myötäpäivää |
-| `SPACE` | Restart peli |
-| `Q` | Lopeta peli |
+| Key | Action |
+|-----|--------|
+| `A` or Left Arrow | Move piece left |
+| `D` or Right Arrow | Move piece right |
+| `S` or Down Arrow | Soft drop |
+| `W` or Up Arrow | Rotate piece clockwise |
+| `SPACE` | Restart game |
+| `Q` | Quit game |
+
 ---
 
-## Tiedostorakenne
+## File Structure
 
 ```
 Tetris-arm_asm/
-├── main.s              # Pelin lähdekoodi ARMv7-kokoonpanokielellä
-├── tetris_runner.py    # Python-ajuri (Unicorn Engine + terminaalinäyttö)
-└── README.md           # Tämä tiedosto
++-- main.s              # Game source code in ARMv7 Assembly
++-- tetris_runner.py    # Python driver (Unicorn Engine + terminal display)
++-- tetris_binary.hex   # Compiled game binary as an ASCII hex string
++-- README.md           # This file
 ```
 
 ---
 
-## Lisenssi
+## License
 
-Tämä projekti on julkaistu ilman erillistä lisenssiä. Kaikki oikeudet pidätetään.
+This project is released without a specific license. All rights reserved.
