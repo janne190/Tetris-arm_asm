@@ -2,8 +2,7 @@
 
 Tetris implementation written in ARMv7 Assembly, running in a [Unicorn Engine](https://www.unicorn-engine.org/) emulator with a Python driver.
 
-[![Tetris Demo](https://img.youtube.com/vi/cNctX6qrSyM/maxresdefault.jpg)](https://www.youtube.com/watch?v=cNctX6qrSyM)
-
+[![Tetris Demo](https://i.ytimg.com/vi/cNctX6qrSyM/hqdefault.jpg)](https://www.youtube.com/watch?v=cNctX6qrSyM)
 ---
 
 ## Table of Contents
